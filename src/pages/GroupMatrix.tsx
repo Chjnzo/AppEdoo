@@ -1,16 +1,26 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/lib/supabase';
-import { Student, Group, Evaluation } from '@/types/database';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Student, Group } from '@/types/database';
+import { useAppStore } from '@/store/useAppStore';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Plus, Minus, CheckCircle2, Loader2, Users } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { 
+  ChevronLeft, 
+  Plus, 
+  Minus, 
+  Sparkles, 
+  CheckCircle2, 
+  Loader2,
+  Save,
+  Users
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { showSuccess, showError } from '@/utils/toast';
-import { Badge } from '@/components/ui/badge';
+import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 
 const SKILLS_DATA = {
   'MOTIVAZIONE': [
@@ -47,26 +57,21 @@ const SKILLS_DATA = {
 
 type SkillKey = keyof typeof SKILLS_DATA;
 
-interface ExtendedEvaluation extends Evaluation {
-  type: 'plus' | 'minus';
-  note: string;
-  sub_criterion_id: string;
-}
-
 const GroupMatrix = () => {
   const { weekId, groupId } = useParams<{ weekId: string; groupId: string }>();
-  const [selectedSkill, setSelectedSkill] = useState<string | null>('panoramica');
+  const [activeSkill, setActiveSkill] = useState<SkillKey>('MOTIVAZIONE');
   const [students, setStudents] = useState<Student[]>([]);
   const [group, setGroup] = useState<Group | null>(null);
-  const [evaluations, setEvaluations] = useState<ExtendedEvaluation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { pendingEvaluations, setPendingEvaluation } = useAppStore();
 
   useEffect(() => {
-    if (!groupId) return;
-    setIsLoading(true);
-    
-    // Fetch students and group
     const fetchData = async () => {
+      if (!groupId) return;
+      setIsLoading(true);
+      
       try {
         const { data: groupData } = await supabase
           .from('groups')
@@ -76,123 +81,79 @@ const GroupMatrix = () => {
         
         if (groupData) setGroup(groupData);
 
-        const { data: studentsData } = await supabase
-          .from('students')
+        const { data: studentsData } = await (supabase.from('students') as any)
           .select('*')
           .eq('group_id', groupId);
         
         if (studentsData) {
           setStudents(studentsData);
           
-          // Fetch evaluations for this group
-          const studentIds = studentsData.map(s => s.id);
-          const { data: evalData } = await supabase
-            .from('evaluations')
+          // Fetch existing evaluations to populate store
+          const { data: evalData } = await (supabase.from('evaluations') as any)
             .select('*')
-            .in('student_id', studentIds);
+            .in('student_id', studentsData.map((s: any) => s.id));
           
-          if (evalData) setEvaluations(evalData as ExtendedEvaluation[]);
+          if (evalData) {
+            evalData.forEach((ev: any) => {
+              setPendingEvaluation(ev.student_id, ev.sub_criterion_id, ev.score_value);
+            });
+          }
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("Error fetching matrix data:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchData();
-  }, [groupId]);
+  }, [groupId, setPendingEvaluation]);
 
-  // Calculate plus/minus counts for Overview
-  const getSkillCounts = (studentId: string, skillId: string) => {
-    const plus = evaluations.filter(e => 
-      e.student_id === studentId && 
-      e.skill_id === skillId && 
-      e.type === 'plus'
-    ).length;
-    
-    const minus = evaluations.filter(e => 
-      e.student_id === studentId && 
-      e.skill_id === skillId && 
-      e.type === 'minus'
-    ).length;
-    
-    return { plus, minus };
+  const handleScoreChange = (studentId: string, criterion: string, delta: number) => {
+    const currentScore = pendingEvaluations[studentId]?.[criterion] || 0;
+    const newScore = Math.max(0, currentScore + delta);
+    setPendingEvaluation(studentId, criterion, newScore);
   };
 
-  // Handle Plus/Minus actions
-  const handlePlusMinus = async (studentId: string, skillId: string, subCriterionId: string, type: 'plus' | 'minus') => {
-    const note = prompt("Inserisci motivo per questa valutazione");
-    if (!note) return;
+  const handleSave = async () => {
+    setIsSaving(true);
+    const toastId = showLoading("Saving evaluations...");
     
-    const newEvaluation = {
-      student_id: studentId,
-      skill_id: skillId,
-      sub_criterion_id: subCriterionId,
-      type,
-      note,
-      score_value: type === 'plus' ? 1 : -1,
-      updated_at: new Date().toISOString()
-    };
-    
-    const { error } = await supabase
-      .from('evaluations')
-      .insert(newEvaluation as any);
-    
-    if (error) {
-      showError("Errore durante il salvataggio");
-      return;
+    try {
+      const updates: any[] = [];
+      for (const [studentId, criteria] of Object.entries(pendingEvaluations)) {
+        for (const [criterionId, score] of Object.entries(criteria)) {
+          const skillId = (Object.keys(SKILLS_DATA) as SkillKey[]).find(s => 
+            SKILLS_DATA[s].includes(criterionId)
+          );
+
+          if (skillId) {
+            updates.push({
+              student_id: studentId,
+              skill_id: skillId,
+              sub_criterion_id: criterionId,
+              score_value: score,
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      if (updates.length > 0) {
+        const { error } = await (supabase.from('evaluations') as any)
+          .upsert(updates, { onConflict: 'student_id,sub_criterion_id' });
+        
+        if (error) throw error;
+      }
+
+      showSuccess("All evaluations saved successfully!");
+    } catch (error: any) {
+      console.error("Save error:", error);
+      showError(error.message || "Failed to save evaluations");
+    } finally {
+      setIsSaving(false);
+      dismissToast(toastId);
     }
-    
-    showSuccess("Valutazione salvata");
-    // Re-fetch data
-    const studentIds = students.map(s => s.id);
-    const { data: evalData } = await supabase
-      .from('evaluations')
-      .select('*')
-      .in('student_id', studentIds);
-    
-    if (evalData) setEvaluations(evalData as ExtendedEvaluation[]);
-  };
-
-  // Overview Matrix data processing
-  const overviewData = () => {
-    if (!students.length || !evaluations.length) return [];
-    
-    const studentSkills = students.map(student => {
-      const skills = Object.keys(SKILLS_DATA).map(skill => {
-        const evaluationsForSkill = evaluations.filter(e => 
-          e.student_id === student.id && 
-          e.skill_id === skill
-        );
-        
-        const plus = evaluationsForSkill.filter(e => e.type === 'plus').length;
-        const minus = evaluationsForSkill.filter(e => e.type === 'minus').length;
-        
-        return {
-          skill,
-          plus,
-          minus
-        };
-      });
-      
-      return { id: student.id, name: `${student.first_name} ${student.last_name}`, skills };
-    });
-    
-    return studentSkills;
-  };
-
-  // Sheet content for history
-  const getHistory = (studentId: string, skillId: string) => {
-    return evaluations.filter(e => 
-      e.student_id === studentId && 
-      e.skill_id === skillId
-    ).map(evaluation => ({
-      date: new Date(evaluation.updated_at).toLocaleDateString('it-IT'),
-      type: evaluation.type,
-      subCriterion: SKILLS_DATA[skillId as SkillKey][0], // Using first sub-criterion for demo
-      note: evaluation.note
-    }));
   };
 
   if (isLoading) {
@@ -209,11 +170,13 @@ const GroupMatrix = () => {
     <AppLayout>
       <div className="h-full flex flex-col space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-6">
-            <Button variant="ghost" size="icon" className="rounded-2xl h-12 w-12 bg-white shadow-sm border border-zinc-100">
-              <ChevronLeft className="h-6 w-6" />
-            </Button>
+            <Link to={`/week/${weekId}`}>
+              <Button variant="ghost" size="icon" className="rounded-2xl h-12 w-12 bg-white shadow-sm border border-zinc-100">
+                <ChevronLeft className="h-6 w-6" />
+              </Button>
+            </Link>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white", group?.color || "bg-zinc-500")}>
@@ -225,161 +188,116 @@ const GroupMatrix = () => {
             </div>
           </div>
           <Button 
-            onClick={() => handlePlusMinus(students[0]?.id || '', 'MOTIVAZIONE', 'Affronta i problemi con atteggiamento positivo', 'plus')}
-            disabled={!students.length}
+            onClick={handleSave}
+            disabled={isSaving}
             className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 h-12 shadow-lg shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
           >
-            <Plus className="h-5 w-5" />
-            Plus
-          </Button>
-          <Button 
-            onClick={() => handlePlusMinus(students[0]?.id || '', 'MOTIVAZIONE', 'Affronta i problemi con atteggiamento positivo', 'minus')}
-            disabled={!students.length}
-            className="rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold px-6 h-12 shadow-lg shadow-red-100 transition-all active:scale-95 disabled:opacity-50"
-          >
-            <Minus className="h-5 w-5" />
-            Minus
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Evaluations
           </Button>
         </div>
 
-        {/* Skill Selection Sidebar */}
-        <div className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto no-scrollbar pr-2">
-          <Button 
-            onClick={() => setSelectedSkill('panoramica')}
-            className={cn(
-              "flex items-center justify-between p-5 rounded-[2rem] transition-all duration-500 text-left group",
-              selectedSkill === 'panoramica' 
-                ? "bg-zinc-900 text-white shadow-2xl shadow-zinc-200 scale-[1.02]" 
-                : "bg-white/70 backdrop-blur-xl text-zinc-500 hover:bg-white border border-zinc-100"
-            )}
-          >
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 mb-1">Overview</span>
-              <span className="font-black text-sm tracking-tight">Panoramica</span>
-            </div>
-            <div className={cn(
-              "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-              selectedSkill === 'panoramica' ? "bg-white/10" : "bg-zinc-50 group-hover:bg-zinc-100"
-            )}>
-              <CheckCircle2 className={cn("h-4 w-4", selectedSkill === 'panoramica' ? "text-white" : "text-zinc-300")} />
-            </div>
-          </Button>
-          
-          {(Object.keys(SKILLS_DATA) as SkillKey[]).map((skill) => (
-            <Button 
-              key={skill}
-              onClick={() => setSelectedSkill(skill)}
-              className={cn(
-                "flex items-center justify-between p-5 rounded-[2rem] transition-all duration-500 text-left group",
-                selectedSkill === skill 
-                  ? "bg-zinc-900 text-white shadow-2xl shadow-zinc-200 scale-[1.02]" 
-                  : "bg-white/70 backdrop-blur-xl text-zinc-500 hover:bg-white border border-zinc-100"
-              )}
-            >
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 mb-1">Skill</span>
-                <span className="font-black text-sm tracking-tight">{skill}</span>
-              </div>
-              <div className={cn(
-                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                selectedSkill === skill ? "bg-white/10" : "bg-zinc-50 group-hover:bg-zinc-100"
-              )}>
-                <CheckCircle2 className={cn("h-4 w-4", selectedSkill === skill ? "text-white" : "text-zinc-300")} />
-              </div>
-            </Button>
-          ))}
-        </div>
+        <div className="flex-1 flex gap-8 min-h-0 overflow-hidden">
+          {/* Left Sidebar - Skill Selection */}
+          <div className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto no-scrollbar pr-2">
+            {(Object.keys(SKILLS_DATA) as SkillKey[]).map((skill) => (
+              <button
+                key={skill}
+                onClick={() => setActiveSkill(skill)}
+                className={cn(
+                  "flex items-center justify-between p-5 rounded-[2rem] transition-all duration-500 text-left group",
+                  activeSkill === skill 
+                    ? "bg-zinc-900 text-white shadow-2xl shadow-zinc-200 scale-[1.02]" 
+                    : "bg-white/70 backdrop-blur-xl text-zinc-500 hover:bg-white border border-zinc-100"
+                )}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 mb-1">Skill</span>
+                  <span className="font-black text-sm tracking-tight">{skill}</span>
+                </div>
+                <div className={cn(
+                  "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                  activeSkill === skill ? "bg-white/10" : "bg-zinc-50 group-hover:bg-zinc-100"
+                )}>
+                  <Sparkles className={cn("h-4 w-4", activeSkill === skill ? "text-white" : "text-zinc-300")} />
+                </div>
+              </button>
+            ))}
+          </div>
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-12">
-          {selectedSkill === 'panoramica' ? (
-            <Card className="rounded-[2.5rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-              <CardHeader className="p-4">
-                <CardTitle className="text-2xl font-bold">Overview Matrix</CardTitle>
-              </CardHeader>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-full divide-y divide-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-2 bg-zinc-50 text-zinc-500">Student</th>
-                      {Object.keys(SKILLS_DATA).map(skill => (
-                        <th key={skill} className="px-4 py-2 bg-zinc-50 text-zinc-500">
-                          {skill}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overviewData().map(student => (
-                      <tr key={student.id}>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-6 w-6" />
-                            <span className="text-sm font-bold">{student.name}</span>
-                          </div>
-                        </td>
-                        {Object.keys(SKILLS_DATA).map(skill => {
-                          const { plus, minus } = getSkillCounts(student.id, skill);
-                          return (
-                            <td key={skill} className="px-4 py-2">
-                              {plus > 0 && (
-                                <Badge className="bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                                  {plus} Più
-                                </Badge>
-                              )}
-                              {minus > 0 && (
-                                <Badge className="bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                                  {minus} Meno
-                                </Badge>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {students.map((student, studentIndex) => (
-                <Card key={student.id} className="rounded-[2.5rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-xl font-bold">
-                      {student.first_name} {student.last_name}
-                    </CardTitle>
-                  </CardHeader>
-                  <div className="p-4 space-y-4">
-                    {Object.keys(SKILLS_DATA).map((skill, skillIndex) => (
-                      <div key={`${student.id}-${skill}`} className="flex items-center gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Sub-criterion</span>
-                          <span className="font-black text-sm tracking-tight">{SKILLS_DATA[skill as SkillKey][skillIndex]}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill as SkillKey][skillIndex], 'plus')}
-                            className="h-12 w-12 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 shadow-lg shadow-green-100 transition-all active:scale-95"
-                          >
-                            <Plus className="h-5 w-5" />
-                            Plus
-                          </Button>
-                          <Button 
-                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill as SkillKey][skillIndex], 'minus')}
-                            className="h-12 w-12 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 shadow-lg shadow-red-100 transition-all active:scale-95"
-                          >
-                            <Minus className="h-5 w-5" />
-                            Minus
-                          </Button>
+          {/* Main Content - Student Matrix */}
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-12">
+            {(students || []).map((student) => (
+              <Card key={student.id} className="rounded-[3rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                <CardContent className="p-8">
+                  <div className="flex flex-col lg:flex-row gap-8">
+                    {/* Student Info */}
+                    <div className="lg:w-64 shrink-0 flex flex-col items-center text-center space-y-4">
+                      <div className="relative">
+                        <Avatar className="h-24 w-24 border-4 border-white shadow-xl">
+                          <AvatarImage src={student.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
+                          <AvatarFallback className="text-xl font-bold">{student.first_name[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center">
+                          <CheckCircle2 className="h-4 w-4 text-white" />
                         </div>
                       </div>
-                    ))}
+                      <div>
+                        <h3 className="text-xl font-black text-zinc-900 tracking-tight">{student.first_name} {student.last_name}</h3>
+                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mt-1">Student</p>
+                      </div>
+                    </div>
+
+                    {/* Criteria Scoring */}
+                    <div className="flex-1 space-y-6">
+                      {SKILLS_DATA[activeSkill].map((criterion, idx) => {
+                        const score = pendingEvaluations[student.id]?.[criterion] || 0;
+                        return (
+                          <div key={idx} className="flex items-center justify-between p-6 bg-zinc-50/50 rounded-[2rem] border border-zinc-100/50 group hover:bg-white hover:shadow-md transition-all duration-300">
+                            <div className="flex-1 pr-8">
+                              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block mb-1">Criterion {idx + 1}</span>
+                              <p className="text-sm font-bold text-zinc-700 leading-relaxed">{criterion}</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => handleScoreChange(student.id, criterion, -1)}
+                                className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all active:scale-90"
+                              >
+                                <Minus className="h-5 w-5" />
+                              </Button>
+                              
+                              <div className="w-16 h-16 bg-white rounded-[1.5rem] shadow-inner border border-zinc-100 flex items-center justify-center">
+                                <span className="text-2xl font-black text-zinc-900">{score}</span>
+                              </div>
+
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => handleScoreChange(student.id, criterion, 1)}
+                                className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-90"
+                              >
+                                <Plus className="h-5 w-5" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </Card>
-              ))}
-            </div>
-          )}
+                </CardContent>
+              </Card>
+            ))}
+
+            {(!students || students.length === 0) && (
+              <div className="h-64 flex flex-col items-center justify-center bg-white/40 rounded-[3rem] border-2 border-dashed border-zinc-200">
+                <Users className="h-12 w-12 text-zinc-300 mb-4" />
+                <p className="text-zinc-400 font-bold">No students found in this group</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>
