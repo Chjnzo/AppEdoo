@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { Week, Student, Group, Evaluation } from '@/types/database';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 interface AppState {
   // Wizard State
@@ -14,9 +17,13 @@ interface AppState {
   activeStudents: Student[];
   activeGroups: Group[];
   
-  // Evaluation State (Optimistic Updates)
-  pendingEvaluations: Record<string, Record<string, number>>; // studentId -> { criterionId: score }
-
+  // Evaluation State
+  pendingEvaluations: Record<string, Record<string, number>>;
+  
+  // Auth State
+  user: User | null;
+  session: Session | null;
+  
   // Actions
   setWizardOpen: (open: boolean) => void;
   setWizardStep: (step: number) => void;
@@ -32,9 +39,12 @@ interface AppState {
   setPendingEvaluation: (studentId: string, criterionId: string, score: number) => void;
   clearPendingEvaluations: () => void;
   resetWizard: () => void;
+  
+  setUser: (user: User | null) => void;
+  logout: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   // Initial State
   isWizardOpen: false,
   currentWizardStep: 1,
@@ -47,7 +57,10 @@ export const useAppStore = create<AppState>((set) => ({
   activeGroups: [],
   
   pendingEvaluations: {},
-
+  
+  user: null,
+  session: null,
+  
   // Actions
   setWizardOpen: (open) => set({ isWizardOpen: open }),
   setWizardStep: (step) => set({ currentWizardStep: step }),
@@ -87,5 +100,21 @@ export const useAppStore = create<AppState>((set) => ({
     draftWeekDetails: {},
     draftStudents: [],
     draftGroups: []
-  })
+  }),
+  
+  setUser: (user) => set({ user }),
+  
+  logout: async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error('Logout error:', error);
+    set({ user: null, session: null });
+  },
 }));
+
+// Hydration: check for existing session on mount
+if (typeof window !== 'undefined') {
+  const { data: { session } } = supabase.auth.getSession();
+  if (session) {
+    useAppStore.getState().setUser(session.user);
+  }
+}

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Link, useLocation } from 'react-router-dom';
+import { Popover } from '@/components/ui/popover';
+import { useAppStore } from '@/store/useAppStore';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -13,6 +15,7 @@ interface AppLayoutProps {
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
+  const { user, logout } = useAppStore();
 
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-50 text-zinc-900 selection:bg-indigo-100">
@@ -52,7 +55,17 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             <Settings className="h-5 w-5" />
           </Button>
           <div className="h-8 w-[1px] bg-zinc-200 mx-2" />
-          <Avatar className="h-11 w-11 cursor-pointer border-2 border-white shadow-sm hover:scale-105 transition-all duration-300">
+          <Popover contentClassName="py-1" placement="bottom" trigger={Avatar}>
+            <div className="py-1">
+              <Button 
+                onClick={logout} 
+                className="rounded-md bg-red-600 text-white text-sm hover:bg-red-700 w-full px-4 py-2 flex justify-center"
+              >
+                Logout
+              </Button>
+            </div>
+          </Popover>
+          <Avatar className="h-11 w-11 cursor-pointer border-2 border-white shadow-sm hover:scale-105 transition-all duration-300" onClick={logout}>
             <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" />
             <AvatarFallback>ED</AvatarFallback>
           </Avatar>
