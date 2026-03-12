@@ -20,7 +20,7 @@ import {
   Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { showSuccess } from '@/utils/toast';
+import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 
 const SKILLS_DATA = {
   'MOTIVAZIONE': [
@@ -63,6 +63,7 @@ const GroupMatrix = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [group, setGroup] = useState<Group | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { pendingEvaluations, setPendingEvaluation } = useAppStore();
 
@@ -80,12 +81,24 @@ const GroupMatrix = () => {
         
         if (groupData) setGroup(groupData);
 
-        const { data: studentsData } = await supabase
-          .from('students')
+        const { data: studentsData } = await (supabase.from('students') as any)
           .select('*')
           .eq('group_id', groupId);
         
-        if (studentsData) setStudents(studentsData);
+        if (studentsData) {
+          setStudents(studentsData);
+          
+          // Fetch existing evaluations to populate store
+          const { data: evalData } = await (supabase.from('evaluations') as any)
+            .select('*')
+            .in('student_id', studentsData.map((s: any) => s.id));
+          
+          if (evalData) {
+            evalData.forEach((ev: any) => {
+              setPendingEvaluation(ev.student_id, ev.sub_criterion_id, ev.score_value);
+            });
+          }
+        }
       } catch (error) {
         console.error("Error fetching matrix data:", error);
       } finally {
@@ -94,12 +107,53 @@ const GroupMatrix = () => {
     };
 
     fetchData();
-  }, [groupId]);
+  }, [groupId, setPendingEvaluation]);
 
   const handleScoreChange = (studentId: string, criterion: string, delta: number) => {
     const currentScore = pendingEvaluations[studentId]?.[criterion] || 0;
     const newScore = Math.max(0, currentScore + delta);
     setPendingEvaluation(studentId, criterion, newScore);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    const toastId = showLoading("Saving evaluations...");
+    
+    try {
+      const updates: any[] = [];
+      for (const [studentId, criteria] of Object.entries(pendingEvaluations)) {
+        for (const [criterionId, score] of Object.entries(criteria)) {
+          const skillId = (Object.keys(SKILLS_DATA) as SkillKey[]).find(s => 
+            SKILLS_DATA[s].includes(criterionId)
+          );
+
+          if (skillId) {
+            updates.push({
+              student_id: studentId,
+              skill_id: skillId,
+              sub_criterion_id: criterionId,
+              score_value: score,
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      if (updates.length > 0) {
+        const { error } = await (supabase.from('evaluations') as any)
+          .upsert(updates, { onConflict: 'student_id,sub_criterion_id' });
+        
+        if (error) throw error;
+      }
+
+      showSuccess("All evaluations saved successfully!");
+    } catch (error: any) {
+      console.error("Save error:", error);
+      showError(error.message || "Failed to save evaluations");
+    } finally {
+      setIsSaving(false);
+      dismissToast(toastId);
+    }
   };
 
   if (isLoading) {
@@ -134,14 +188,16 @@ const GroupMatrix = () => {
             </div>
           </div>
           <Button 
-            onClick={() => showSuccess("Evaluations saved locally")}
-            className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 h-12 shadow-lg shadow-indigo-100"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 h-12 shadow-lg shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
           >
-            <Save className="mr-2 h-4 w-4" /> Save Progress
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Evaluations
           </Button>
         </div>
 
-        <div className="flex-1 flex gap-8 min-h-0">
+        <div className="flex-1 flex gap-8 min-h-0 overflow-hidden">
           {/* Left Sidebar - Skill Selection */}
           <div className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto no-scrollbar pr-2">
             {(Object.keys(SKILLS_DATA) as SkillKey[]).map((skill) => (
@@ -171,7 +227,7 @@ const GroupMatrix = () => {
 
           {/* Main Content - Student Matrix */}
           <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-12">
-            {students.map((student) => (
+            {(students || []).map((student) => (
               <Card key={student.id} className="rounded-[3rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
                 <CardContent className="p-8">
                   <div className="flex flex-col lg:flex-row gap-8">
@@ -235,7 +291,7 @@ const GroupMatrix = () => {
               </Card>
             ))}
 
-            {students.length === 0 && (
+            {(!students || students.length === 0) && (
               <div className="h-64 flex flex-col items-center justify-center bg-white/40 rounded-[3rem] border-2 border-dashed border-zinc-200">
                 <Users className="h-12 w-12 text-zinc-300 mb-4" />
                 <p className="text-zinc-400 font-bold">No students found in this group</p>
