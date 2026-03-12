@@ -5,7 +5,7 @@ import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Calendar, ArrowRight, MoreVertical, Loader2, Trash2, Edit2, Palette } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import WizardModal from '@/components/WizardModal';
 import { supabase } from '@/lib/supabase';
 import { Week } from '@/types/database';
@@ -101,8 +101,7 @@ const Index = () => {
     if (!editWeek) return;
     const toastId = showLoading("Salvataggio...");
     try {
-      const { error } = await supabase
-        .from('weeks')
+      const { error } = await (supabase.from('weeks') as any)
         .update({ institute_name: editWeek.institute_name })
         .eq('id', editWeek.id);
       
@@ -120,8 +119,7 @@ const Index = () => {
   const updateColor = async (weekId: string, color: string) => {
     const toastId = showLoading("Aggiornamento colore...");
     try {
-      const { error } = await supabase
-        .from('weeks')
+      const { error } = await (supabase.from('weeks') as any)
         .update({ color })
         .eq('id', weekId);
       
