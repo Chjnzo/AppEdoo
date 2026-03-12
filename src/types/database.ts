@@ -40,6 +40,7 @@ export interface Week {
   teacher_name: string;
   notes?: string;
   created_at: string;
+  color?: string;
 }
 
 export interface Student {

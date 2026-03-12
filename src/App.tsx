@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import WeekDetail from "./pages/WeekDetail";
 import GroupMatrix from "./pages/GroupMatrix";
 import Login from "./pages/Login";
+import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import { useAppStore } from "./store/useAppStore";
 
@@ -21,11 +22,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setLoading(false);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     };
     checkUser();
   }, []);
@@ -72,6 +69,12 @@ const App = () => {
             <Route path="/week/:weekId/group/:groupId" element={
               <ProtectedRoute>
                 <GroupMatrix />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             } />
 
