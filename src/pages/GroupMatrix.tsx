@@ -6,10 +6,11 @@ import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/lib/supabase';
 import { Student, Group, Evaluation } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button, Dialog, DialogContent, DialogTitle, DialogContent as DialogContentComponent, DialogFooter } from 'shadcn/ui';
-import { ChevronLeft, Plus, Minus, CheckCircle2, Loader2, Save, Users, Sheet, Close } from 'lucide-react';
-import { cn, useToast } from '@/lib/utils';
-import { showSuccess, showError, showLoading } from '@/utils/toast';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, Plus, Minus, CheckCircle2, Loader2, Users } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { showSuccess, showError } from '@/utils/toast';
+import { Badge } from '@/components/ui/badge';
 
 const SKILLS_DATA = {
   'MOTIVAZIONE': [
@@ -46,14 +47,19 @@ const SKILLS_DATA = {
 
 type SkillKey = keyof typeof SKILLS_DATA;
 
+interface ExtendedEvaluation extends Evaluation {
+  type: 'plus' | 'minus';
+  note: string;
+  sub_criterion_id: string;
+}
+
 const GroupMatrix = () => {
   const { weekId, groupId } = useParams<{ weekId: string; groupId: string }>();
   const [selectedSkill, setSelectedSkill] = useState<string | null>('panoramica');
   const [students, setStudents] = useState<Student[]>([]);
   const [group, setGroup] = useState<Group | null>(null);
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [evaluations, setEvaluations] = useState<ExtendedEvaluation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const toast = useToast();
 
   useEffect(() => {
     if (!groupId) return;
@@ -75,16 +81,18 @@ const GroupMatrix = () => {
           .select('*')
           .eq('group_id', groupId);
         
-        if (studentsData) setStudents(studentsData || []);
-
-        // Fetch evaluations for this group
-        const studentIds = studentsData?.map(s => s.id) || [];
-        const { data: evalData } = await supabase
-          .from('evaluations')
-          .select('*')
-          .in('student_id', studentIds);
-        
-        if (evalData) setEvaluations(evalData);
+        if (studentsData) {
+          setStudents(studentsData);
+          
+          // Fetch evaluations for this group
+          const studentIds = studentsData.map(s => s.id);
+          const { data: evalData } = await supabase
+            .from('evaluations')
+            .select('*')
+            .in('student_id', studentIds);
+          
+          if (evalData) setEvaluations(evalData as ExtendedEvaluation[]);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -113,26 +121,38 @@ const GroupMatrix = () => {
   };
 
   // Handle Plus/Minus actions
-  const handlePlusMinus = (studentId: string, skillId: string, subCriterionId: string, type: 'plus' | 'minus') => {
+  const handlePlusMinus = async (studentId: string, skillId: string, subCriterionId: string, type: 'plus' | 'minus') => {
     const note = prompt("Inserisci motivo per questa valutazione");
     if (!note) return;
     
-    const newEvaluation: Evaluation = {
+    const newEvaluation = {
       student_id: studentId,
       skill_id: skillId,
       sub_criterion_id: subCriterionId,
       type,
-      note
+      note,
+      score_value: type === 'plus' ? 1 : -1,
+      updated_at: new Date().toISOString()
     };
     
-    const { error } = supabase.from('evaluations').insert(newEvaluation);
+    const { error } = await supabase
+      .from('evaluations')
+      .insert(newEvaluation as any);
+    
     if (error) {
       showError("Errore durante il salvataggio");
       return;
     }
     
     showSuccess("Valutazione salvata");
-    fetchData(); // Re-fetch data
+    // Re-fetch data
+    const studentIds = students.map(s => s.id);
+    const { data: evalData } = await supabase
+      .from('evaluations')
+      .select('*')
+      .in('student_id', studentIds);
+    
+    if (evalData) setEvaluations(evalData as ExtendedEvaluation[]);
   };
 
   // Overview Matrix data processing
@@ -167,11 +187,11 @@ const GroupMatrix = () => {
     return evaluations.filter(e => 
       e.student_id === studentId && 
       e.skill_id === skillId
-    ).map(eval => ({
-      date: new Date(e.updated_at).toLocaleDateString('it-IT'),
-      type: eval.type,
-      subCriterion: SKILLS_DATA[skillId][eval.sub_criterion_id],
-      note: eval.note
+    ).map(evaluation => ({
+      date: new Date(evaluation.updated_at).toLocaleDateString('it-IT'),
+      type: evaluation.type,
+      subCriterion: SKILLS_DATA[skillId as SkillKey][0], // Using first sub-criterion for demo
+      note: evaluation.note
     }));
   };
 
@@ -264,7 +284,7 @@ const GroupMatrix = () => {
                 "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
                 selectedSkill === skill ? "bg-white/10" : "bg-zinc-50 group-hover:bg-zinc-100"
               )}>
-                <Sparkles className={cn("h-4 w-4", selectedSkill === skill ? "text-white" : "text-zinc-300")} />
+                <CheckCircle2 className={cn("h-4 w-4", selectedSkill === skill ? "text-white" : "text-zinc-300")} />
               </div>
             </Button>
           ))}
@@ -312,22 +332,6 @@ const GroupMatrix = () => {
                                   {minus} Meno
                                 </Badge>
                               )}
-                              <Sheet 
-                                open={false}
-                                onOpen={() => toast.open({ title: "History", content: getHistory(student.id, skill) })}
-                                className="absolute right-0 top-0 w-64 h-full bg-zinc-50/50 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
-                              >
-                                <div className="p-4">
-                                  {getHistory(student.id, skill).map((item, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 mb-2">
-                                      {item.type === 'plus' && <CheckCircle2 className="h-4 w-4 text-green-700" />}
-                                      {item.type === 'minus' && <Minus className="h-4 w-4 text-red-700" />}
-                                      <span className="text-sm font-medium">{item.subCriterion}</span>
-                                      <span className="text-sm text-zinc-400">{item.note}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Sheet>
                             </td>
                           );
                         })}
@@ -351,18 +355,18 @@ const GroupMatrix = () => {
                       <div key={`${student.id}-${skill}`} className="flex items-center gap-4">
                         <div className="flex flex-col">
                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Sub-criterion</span>
-                          <span className="font-black text-sm tracking-tight">{SKILLS_DATA[skill][skillIndex]}</span>
+                          <span className="font-black text-sm tracking-tight">{SKILLS_DATA[skill as SkillKey][skillIndex]}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Button 
-                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill][skillIndex], 'plus')}
+                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill as SkillKey][skillIndex], 'plus')}
                             className="h-12 w-12 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 shadow-lg shadow-green-100 transition-all active:scale-95"
                           >
                             <Plus className="h-5 w-5" />
                             Plus
                           </Button>
                           <Button 
-                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill][skillIndex], 'minus')}
+                            onClick={() => handlePlusMinus(student.id, skill, SKILLS_DATA[skill as SkillKey][skillIndex], 'minus')}
                             className="h-12 w-12 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 shadow-lg shadow-red-100 transition-all active:scale-95"
                           >
                             <Minus className="h-5 w-5" />
