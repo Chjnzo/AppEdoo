@@ -113,8 +113,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // Hydration: check for existing session on mount
 if (typeof window !== 'undefined') {
-  const { data: { session } } = supabase.auth.getSession();
-  if (session) {
-    useAppStore.getState().setUser(session.user);
-  }
+  supabase.auth.getSession().then(({ data }) => {
+    if (data && data.session) {
+      useAppStore.getState().setUser(data.session.user);
+    }
+  });
 }
