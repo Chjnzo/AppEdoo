@@ -32,18 +32,18 @@ const DraggableStudent = ({ student }: { student: any }) => {
       {...attributes}
       {...listeners}
       className={cn(
-        "flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-zinc-200 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-md",
+        "flex items-center gap-1.5 bg-white rounded-full px-2 py-1 shadow-sm border border-zinc-200 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-md",
         isDragging && "opacity-50 shadow-xl scale-105"
       )}
     >
-      <Avatar className="h-8 w-8 pointer-events-none">
+      <Avatar className="h-6 w-6 pointer-events-none">
         <AvatarImage src={student.photo_preview || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
-        <AvatarFallback>{student.first_name?.[0]}</AvatarFallback>
+        <AvatarFallback className="text-[10px]">{student.first_name?.[0]}</AvatarFallback>
       </Avatar>
-      <span className="font-medium text-zinc-800 pointer-events-none truncate max-w-[80px]">
+      <span className="text-xs font-bold text-zinc-800 pointer-events-none truncate max-w-[70px]">
         {student.first_name} {student.last_name?.[0]}.
       </span>
-      <GripVertical className="h-3 w-3 text-zinc-300 ml-1" />
+      <GripVertical className="h-3 w-3 text-zinc-300" />
     </div>
   );
 };
@@ -58,26 +58,26 @@ const DroppableGroup = ({ group, students }: { group: any, students: any[] }) =>
     <Card 
       ref={setNodeRef}
       className={cn(
-        "group-card rounded-2xl bg-white shadow-lg border-2 transition-all duration-300 min-h-[140px]",
+        "group-card rounded-[2rem] bg-white shadow-lg border-2 transition-all duration-300 min-h-[120px]",
         isOver ? "border-indigo-500 bg-indigo-50/30 scale-[1.02]" : "border-zinc-100"
       )}
     >
-      <CardHeader className="p-4 pb-2">
+      <CardHeader className="p-3 pb-1">
         <div className="flex items-center gap-2">
-          <div className={cn("w-3 h-3 rounded-full", group.color)} />
-          <CardTitle className="text-lg font-bold text-zinc-900">
+          <div className={cn("w-2.5 h-2.5 rounded-full", group.color)} />
+          <CardTitle className="text-base font-black text-zinc-900">
             {group.name}
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="p-4 pt-0">
-        <div className="flex flex-wrap gap-2">
+      <CardContent className="p-3 pt-0">
+        <div className="flex flex-wrap gap-1.5">
           {students.map((student) => (
             <DraggableStudent key={student.id} student={student} />
           ))}
           {students.length === 0 && !isOver && (
-            <div className="w-full py-4 border-2 border-dashed border-zinc-100 rounded-xl flex items-center justify-center">
-              <span className="text-xs font-medium text-zinc-300 uppercase tracking-wider text-center">Drag students here</span>
+            <div className="w-full py-3 border-2 border-dashed border-zinc-50 rounded-2xl flex items-center justify-center">
+              <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest text-center">Empty</span>
             </div>
           )}
         </div>
@@ -118,7 +118,7 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="flex flex-col h-full space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {draftGroups.map((group) => (
             <DroppableGroup 
               key={group.id}
@@ -128,27 +128,29 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
           ))}
         </div>
 
-        <div className="bg-zinc-50/50 p-6 rounded-[2rem] border border-zinc-100">
-          <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Unassigned Students</h3>
-          <div className="flex flex-wrap gap-3">
-            {unassignedStudents.length === 0 ? (
-              <div className="text-center text-zinc-300 py-4 w-full font-medium italic">
-                All students assigned
-              </div>
-            ) : (
-              unassignedStudents.map((student) => (
-                <DraggableStudent key={student.id} student={student} />
-              ))
-            )}
+        <div className="bg-zinc-50/50 p-6 rounded-[2.5rem] border border-zinc-100 flex-1 min-h-0 flex flex-col">
+          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Unassigned Pool ({unassignedStudents.length})</h3>
+          <div className="flex-1 overflow-y-auto no-scrollbar">
+            <div className="flex flex-wrap gap-2">
+              {unassignedStudents.length === 0 ? (
+                <div className="text-center text-zinc-300 py-8 w-full font-bold uppercase text-xs tracking-widest">
+                  All Students Assigned
+                </div>
+              ) : (
+                unassignedStudents.map((student) => (
+                  <DraggableStudent key={student.id} student={student} />
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         <Button 
           onClick={onContinue}
           disabled={!allStudentsAssigned}
-          className="w-full rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-6 shadow-xl shadow-zinc-200 transition-all disabled:opacity-50"
+          className="w-full rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-black py-6 shadow-xl shadow-zinc-200 transition-all disabled:opacity-50 text-sm uppercase tracking-widest"
         >
-          {allStudentsAssigned ? "Save & Finish" : "Assign all students to continue"}
+          {allStudentsAssigned ? "Initialize Educational Week" : `Assign ${unassignedStudents.length} more students`}
         </Button>
       </div>
     </DndContext>

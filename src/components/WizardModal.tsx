@@ -190,17 +190,17 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[700px] rounded-[2.5rem] border-white/20 bg-white/80 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] p-0 overflow-hidden">
-        <DialogHeader className="p-8">
+      <DialogContent className="w-[95vw] max-w-[1200px] rounded-[2.5rem] border-white/20 bg-white/80 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] p-0 overflow-hidden">
+        <DialogHeader className="p-8 pb-4">
           <DialogTitle className="text-2xl font-bold tracking-tight">
             {currentWizardStep === 1 && "Create New Week"}
             {currentWizardStep === 2 && "Add Students"}
             {currentWizardStep === 3 && "Assign Groups"}
           </DialogTitle>
         </DialogHeader>
-        <div className="p-8">
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-6">
+        <div className="p-8 pt-0">
+          <div className="mb-6">
+            <div className="flex items-center gap-4 mb-2">
               {steps.map((s) => (
                 <div key={s.id} className="flex items-center gap-2">
                   <div className={cn(
@@ -221,7 +221,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
             </div>
           </div>
 
-          <div className="min-h-[350px] py-4">
+          <div className="min-h-[60vh] max-h-[75vh] overflow-y-auto no-scrollbar py-4 px-1">
             {currentWizardStep === 1 && (
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="space-y-2">
@@ -302,14 +302,14 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
                   </div>
                 </div>
 
-                <div className="bg-zinc-50/50 rounded-3xl p-6 max-h-[240px] overflow-y-auto no-scrollbar border border-zinc-100">
+                <div className="bg-zinc-50/50 rounded-3xl p-6 max-h-[400px] overflow-y-auto no-scrollbar border border-zinc-100">
                   {draftStudents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-zinc-400">
                       <Users className="h-12 w-12 mb-2 opacity-10" />
                       <p className="text-sm font-medium">No students added yet</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {draftStudents.map((student, index) => (
                         <div key={student.id || index} className="flex items-center justify-between bg-white p-3 rounded-2xl shadow-sm border border-zinc-50 group">
                           <div className="flex items-center gap-3">
