@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
+import Step3Groups from '@/components/wizard/Step3Groups';
 
 interface WizardModalProps {
   open: boolean;
@@ -130,6 +131,13 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[700px] rounded-[2.5rem] border-white/20 bg-white/80 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] p-0 overflow-hidden">
+        <DialogHeader className="p-8">
+          <DialogTitle className="text-2xl font-bold tracking-tight">
+            {currentWizardStep === 1 && "Create New Week"}
+            {currentWizardStep === 2 && "Add Students"}
+            {currentWizardStep === 3 && "Assign Groups"}
+          </DialogTitle>
+        </DialogHeader>
         <div className="p-8">
           <div className="mb-8">
             <div className="flex items-center gap-4 mb-6">
@@ -151,11 +159,6 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
                 </div>
               ))}
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              {currentWizardStep === 1 && "Create New Week"}
-              {currentWizardStep === 2 && "Add Students"}
-              {currentWizardStep === 3 && "Assign Groups"}
-            </h2>
           </div>
 
           <div className="min-h-[350px] py-4">
@@ -239,31 +242,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
             )}
 
             {currentWizardStep === 3 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-zinc-500 font-medium">
-                    {draftStudents.length} students will be distributed across {draftGroups.length} groups.
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleAddGroup}
-                    className="rounded-2xl border-zinc-200 font-bold"
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Group
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 max-h-[240px] overflow-y-auto no-scrollbar">
-                  {draftGroups.map((group, index) => (
-                    <div key={index} className="bg-white p-4 rounded-3xl border border-zinc-100 shadow-sm flex items-center gap-4">
-                      <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", group.color)}>
-                        <Users className="text-white h-5 w-5" />
-                      </div>
-                      <span className="font-bold text-sm">{group.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <Step3Groups onContinue={handleFinish} />
             )}
           </div>
         </div>
