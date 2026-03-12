@@ -29,6 +29,7 @@ interface AppState {
   setWizardStep: (step: number) => void;
   updateDraftWeek: (details: Partial<Week>) => void;
   addDraftStudent: (student: Partial<Student>) => void;
+  setDraftStudents: (students: Partial<Student>[]) => void;
   removeDraftStudent: (index: number) => void;
   setDraftGroups: (groups: Partial<Group>[]) => void;
   
@@ -70,8 +71,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   })),
   
   addDraftStudent: (student) => set((state) => ({
-    draftStudents: [...state.draftStudents, student]
+    draftStudents: [...state.draftStudents, { ...student, id: student.id || `temp-${Date.now()}-${Math.random()}` }]
   })),
+
+  setDraftStudents: (students) => set({ draftStudents: students }),
   
   removeDraftStudent: (index) => set((state) => ({
     draftStudents: state.draftStudents.filter((_, i) => i !== index)

@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import { DndContext, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { TouchSensor, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useAppStore } from '@/store/useAppStore';
-import { Avatar, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
-import { Users, Plus, Trash2 } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Step3GroupsProps {
@@ -63,20 +64,6 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
           ? { ...student, group_id: overId } 
           : student
       ));
-      
-      // Update group's student list
-      setDraftGroups(draftGroups.map(group => 
-        group.id === overId 
-          ? { ...group, students: [...(group.students || []), activeId] } 
-          : group
-      ));
-      
-      // Remove student from other groups
-      setDraftGroups(draftGroups.map(group => 
-        group.id !== overId && group.students?.includes(activeId)
-          ? { ...group, students: group.students?.filter(id => id !== activeId) || [] } 
-          : group
-      ));
     }
     
     setDraggedStudentId(null);
@@ -97,6 +84,9 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
             <Card 
               key={group.id}
               className={`group-card rounded-2xl bg-white shadow-lg border border-zinc-100 hover:shadow-xl transition-all duration-300`}
+              // Add data attributes for DnD detection
+              data-type="Group"
+              data-id={group.id}
             >
               <CardHeader className="p-4 pb-2">
                 <div className="flex items-center justify-between">
@@ -110,7 +100,7 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
                     onClick={() => {
                       setDraftGroups(draftGroups.filter(g => g.id !== group.id));
                       setDraftStudents(draftStudents.map(s => 
-                        s.group_id === group.id ? { ...s, group_id: null } : s
+                        s.group_id === group.id ? { ...s, group_id: undefined } : s
                       ));
                     }}
                   >
@@ -126,8 +116,6 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
                       <div
                         key={student.id}
                         className="flex items-center gap-2 bg-zinc-50 rounded-full px-3 py-1 text-sm"
-                        data-type="Student"
-                        data-id={student.id}
                       >
                         <Avatar className="h-6 w-6">
                           <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
@@ -153,8 +141,7 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
             setDraftGroups([...draftGroups, { 
               id: `group-${Date.now()}`, 
               name: `Group ${draftGroups.length + 1}`, 
-              color: nextColor,
-              students: []
+              color: nextColor
             }]);
           }}
           className="w-full rounded-2xl border-zinc-200 font-bold"
@@ -175,6 +162,7 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
                 <div
                   key={student.id}
                   className="flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-zinc-200 cursor-move hover:shadow-md transition-shadow"
+                  // Add data attributes for DnD detection
                   data-type="Student"
                   data-id={student.id}
                 >
