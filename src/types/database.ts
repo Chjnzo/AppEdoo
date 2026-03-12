@@ -51,6 +51,9 @@ export interface Student {
   photo_url?: string;
   qr_code_url?: string;
   group_id?: string;
+  // UI-only properties for draft state
+  photo_file?: File | null;
+  photo_preview?: string;
 }
 
 export interface Group {
