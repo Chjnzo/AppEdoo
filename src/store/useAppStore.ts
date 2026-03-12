@@ -4,6 +4,15 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
+const DEFAULT_GROUPS = [
+  { id: 'g1', name: 'Gruppo Rosso', color: 'bg-red-500' },
+  { id: 'g2', name: 'Gruppo Blu', color: 'bg-blue-500' },
+  { id: 'g3', name: 'Gruppo Verde', color: 'bg-emerald-500' },
+  { id: 'g4', name: 'Gruppo Giallo', color: 'bg-amber-500' },
+  { id: 'g5', name: 'Gruppo Viola', color: 'bg-violet-500' },
+  { id: 'g6', name: 'Gruppo Arancione', color: 'bg-orange-500' }
+];
+
 interface AppState {
   // Wizard State
   isWizardOpen: boolean;
@@ -51,7 +60,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentWizardStep: 1,
   draftWeekDetails: {},
   draftStudents: [],
-  draftGroups: [],
+  draftGroups: [...DEFAULT_GROUPS],
   
   activeWeek: null,
   activeStudents: [],
@@ -102,7 +111,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     currentWizardStep: 1,
     draftWeekDetails: {},
     draftStudents: [],
-    draftGroups: []
+    draftGroups: [...DEFAULT_GROUPS]
   }),
   
   setUser: (user) => set({ user }),

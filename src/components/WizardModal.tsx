@@ -5,13 +5,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronRight, ChevronLeft, Check, Users, ClipboardList, LayoutGrid, Plus, Trash2, UserPlus, Camera, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, Users, ClipboardList, LayoutGrid, Plus, Trash2, UserPlus, Camera, X, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { supabase } from '@/lib/supabase';
 import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 import Step3Groups from '@/components/wizard/Step3Groups';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+
+const MOCK_NAMES = [
+  ['Marco', 'Rossi'], ['Giulia', 'Bianchi'], ['Alessandro', 'Esposito'], ['Sofia', 'Ricci'], ['Francesco', 'Marino'],
+  ['Alice', 'Greco'], ['Lorenzo', 'Bruno'], ['Emma', 'Gallo'], ['Matteo', 'Conti'], ['Chiara', 'De Luca'],
+  ['Gabriele', 'Mancini'], ['Giorgia', 'Costa'], ['Riccardo', 'Giordano'], ['Martina', 'Rizzo'], ['Davide', 'Lombardi'],
+  ['Gaia', 'Moretti'], ['Tommaso', 'Barbieri'], ['Beatrice', 'Fontana'], ['Federico', 'Santoro'], ['Ginevra', 'Mariani'],
+  ['Andrea', 'Rinaldi'], ['Elena', 'Caruso'], ['Simone', 'Ferrara'], ['Sara', 'Galli'], ['Luca', 'Martini'],
+  ['Aurora', 'Leone'], ['Edoardo', 'Longo'], ['Ludovica', 'Gentile'], ['Pietro', 'Martinelli'], ['Vittoria', 'Vitale']
+];
+
+const MOCK_CLASS = MOCK_NAMES.map(([first, last], i) => ({
+  id: `mock-${i}`,
+  first_name: first,
+  last_name: last,
+  photo_preview: `https://api.dicebear.com/7.x/avataaars/svg?seed=mock-${i}`
+}));
 
 interface WizardModalProps {
   open: boolean;
@@ -25,10 +41,10 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
     draftWeekDetails, 
     updateDraftWeek,
     draftStudents,
+    setDraftStudents,
     addDraftStudent,
     removeDraftStudent,
     draftGroups,
-    setDraftGroups,
     resetWizard 
   } = useAppStore();
 
@@ -88,10 +104,9 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
       createdWeekId = week.id;
 
       // 2. Create Groups
-      // Payload Sanitization: Remove temp IDs and map to DB columns
       const groupsToInsert = draftGroups.map(g => ({ 
-        name: g.name || 'Unnamed Group', 
-        color: g.color || 'bg-zinc-500', 
+        name: g.name, 
+        color: g.color, 
         week_id: week.id 
       }));
 
@@ -102,9 +117,17 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
 
       if (groupsError || !createdGroups) throw groupsError || new Error("Failed to create groups");
 
-      // 3. Upload Photos & Create Students
+      // 3. Create Group ID Map
+      const groupIdMap: Record<string, string> = {};
+      draftGroups.forEach((g, index) => {
+        if (createdGroups[index]) {
+          groupIdMap[g.id] = createdGroups[index].id;
+        }
+      });
+
+      // 4. Upload Photos & Create Students
       const studentsToInsert = await Promise.all(draftStudents.map(async (s) => {
-        let photoUrl = null;
+        let photoUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.id}`;
         
         if (s.photo_file) {
           const fileName = `${week.id}/${Date.now()}-${s.photo_file.name}`;
@@ -118,14 +141,16 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
               .getPublicUrl(fileName);
             photoUrl = publicUrl;
           }
+        } else if (s.photo_preview && !s.photo_preview.startsWith('data:')) {
+          // If it's a mock student or has an existing URL
+          photoUrl = s.photo_preview;
         }
 
-        // Payload Sanitization: ONLY include existing DB columns, EXCLUDE temp IDs
         return { 
           first_name: s.first_name || '', 
           last_name: s.last_name || '', 
           week_id: week.id, 
-          group_id: createdGroups.find(cg => cg.name === draftGroups.find(dg => dg.id === s.group_id)?.name)?.id,
+          group_id: s.group_id ? groupIdMap[s.group_id] : null,
           photo_url: photoUrl
         };
       }));
@@ -139,13 +164,10 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
       showSuccess("Week created successfully!");
       handleClose(false);
     } catch (error: any) {
-      console.error("[WizardModal] Error during saving:", error);
-      
-      // Rollback: Delete the week if it was created but the process failed later
+      console.error("[WizardModal] Submission failed:", error);
       if (createdWeekId) {
         await supabase.from('weeks').delete().eq('id', createdWeekId);
       }
-      
       showError("Errore durante il salvataggio. Dati annullati.");
     } finally {
       setIsSaving(false);
@@ -241,13 +263,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
                     >
                       <Plus className="text-white h-6 w-6" />
                     </button>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={handlePhotoChange} 
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
                   </div>
                   
                   <div className="flex-1 space-y-4">
@@ -271,12 +287,18 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
                         />
                       </div>
                     </div>
-                    <Button 
-                      onClick={handleAddStudent}
-                      className="w-full h-12 rounded-2xl bg-zinc-900 text-white font-bold"
-                    >
-                      <UserPlus className="mr-2 h-4 w-4" /> Add Student
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={handleAddStudent} className="flex-1 h-12 rounded-2xl bg-zinc-900 text-white font-bold">
+                        <UserPlus className="mr-2 h-4 w-4" /> Add Student
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setDraftStudents([...draftStudents, ...MOCK_CLASS])}
+                        className="h-12 rounded-2xl border-indigo-200 text-indigo-600 font-bold hover:bg-indigo-50"
+                      >
+                        <Database className="mr-2 h-4 w-4" /> Mock Data
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -289,10 +311,10 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
                   ) : (
                     <div className="grid grid-cols-2 gap-3">
                       {draftStudents.map((student, index) => (
-                        <div key={index} className="flex items-center justify-between bg-white p-3 rounded-2xl shadow-sm border border-zinc-50 group">
+                        <div key={student.id || index} className="flex items-center justify-between bg-white p-3 rounded-2xl shadow-sm border border-zinc-50 group">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={student.photo_preview} />
+                              <AvatarImage src={student.photo_preview || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
                               <AvatarFallback>{student.first_name?.[0]}</AvatarFallback>
                             </Avatar>
                             <span className="font-bold text-sm truncate max-w-[100px]">
@@ -323,21 +345,11 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
 
         <DialogFooter className="bg-zinc-50/50 p-6 border-t border-zinc-100">
           <div className="flex items-center justify-between w-full">
-            <Button 
-              variant="ghost" 
-              onClick={prevStep} 
-              disabled={currentWizardStep === 1 || isSaving}
-              className="rounded-2xl font-bold text-zinc-500"
-            >
+            <Button variant="ghost" onClick={prevStep} disabled={currentWizardStep === 1 || isSaving} className="rounded-2xl font-bold text-zinc-500">
               <ChevronLeft className="mr-2 h-4 w-4" /> Back
             </Button>
-            
             {currentWizardStep < 3 && (
-              <Button 
-                onClick={nextStep}
-                disabled={currentWizardStep === 1 && (!draftWeekDetails.code || !draftWeekDetails.institute_name)}
-                className="rounded-2xl px-8 font-bold bg-zinc-900 hover:bg-zinc-800 text-white shadow-lg shadow-zinc-200"
-              >
+              <Button onClick={nextStep} disabled={currentWizardStep === 1 && (!draftWeekDetails.code || !draftWeekDetails.institute_name)} className="rounded-2xl px-8 font-bold bg-zinc-900 hover:bg-zinc-800 text-white shadow-lg shadow-zinc-200">
                 Next <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             )}
