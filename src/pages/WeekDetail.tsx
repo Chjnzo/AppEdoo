@@ -141,12 +141,12 @@ const WeekDetail = () => {
             <div className="bg-white/50 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-3 flex items-center gap-8 shadow-sm">
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Groups</span>
-                <span className="text-xl font-black text-zinc-900">{groups.length}</span>
+                <span className="text-xl font-black text-zinc-900">{(groups || []).length}</span>
               </div>
               <div className="w-[1px] h-8 bg-zinc-200" />
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Students</span>
-                <span className="text-xl font-black text-zinc-900">{students.length}</span>
+                <span className="text-xl font-black text-zinc-900">{(students || []).length}</span>
               </div>
             </div>
           </div>
@@ -154,8 +154,8 @@ const WeekDetail = () => {
 
         {/* Groups Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {groups.map((group) => {
-            const groupStudents = students.filter(s => s.group_id === group.id);
+          {(groups || []).map((group) => {
+            const groupStudents = (students || []).filter(s => s.group_id === group.id);
             
             return (
               <Card 
@@ -194,10 +194,10 @@ const WeekDetail = () => {
                           >
                             <Avatar className="h-6 w-6 border border-white">
                               <AvatarImage src={student.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
-                              <AvatarFallback className="text-[8px] font-bold">{student.first_name[0]}</AvatarFallback>
+                              <AvatarFallback className="text-[8px] font-bold">{student.first_name?.[0]}</AvatarFallback>
                             </Avatar>
                             <span className="text-[11px] font-bold text-zinc-700">
-                              {student.first_name} {student.last_name[0]}.
+                              {student.first_name} {student.last_name?.[0]}.
                             </span>
                           </div>
                         ))
@@ -213,8 +213,7 @@ const WeekDetail = () => {
             );
           })}
           
-          {/* Empty State / Add Group Placeholder */}
-          {groups.length === 0 && (
+          {(groups || []).length === 0 && (
             <div className="col-span-full py-20 flex flex-col items-center justify-center space-y-4 bg-white/40 rounded-[3rem] border-2 border-dashed border-zinc-200">
               <div className="w-16 h-16 bg-zinc-100 rounded-[2rem] flex items-center justify-center">
                 <LayoutGrid className="h-8 w-8 text-zinc-300" />
