@@ -70,6 +70,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
 
     setIsSaving(true);
     const toastId = showLoading("Creating your educational week...");
+    let createdWeekId = null;
 
     try {
       // 1. Create Week
@@ -84,8 +85,10 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
         .single();
 
       if (weekError || !week) throw weekError || new Error("Failed to create week");
+      createdWeekId = week.id;
 
       // 2. Create Groups
+      // Payload Sanitization: Remove temp IDs and map to DB columns
       const groupsToInsert = draftGroups.map(g => ({ 
         name: g.name || 'Unnamed Group', 
         color: g.color || 'bg-zinc-500', 
@@ -117,11 +120,12 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
           }
         }
 
+        // Payload Sanitization: ONLY include existing DB columns, EXCLUDE temp IDs
         return { 
           first_name: s.first_name || '', 
           last_name: s.last_name || '', 
           week_id: week.id, 
-          group_id: s.group_id,
+          group_id: createdGroups.find(cg => cg.name === draftGroups.find(dg => dg.id === s.group_id)?.name)?.id,
           photo_url: photoUrl
         };
       }));
@@ -135,8 +139,14 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
       showSuccess("Week created successfully!");
       handleClose(false);
     } catch (error: any) {
-      console.error("Error creating week:", error);
-      showError(error.message || "Failed to create week");
+      console.error("[WizardModal] Error during saving:", error);
+      
+      // Rollback: Delete the week if it was created but the process failed later
+      if (createdWeekId) {
+        await supabase.from('weeks').delete().eq('id', createdWeekId);
+      }
+      
+      showError("Errore durante il salvataggio. Dati annullati.");
     } finally {
       setIsSaving(false);
       dismissToast(toastId);
