@@ -70,5 +70,6 @@ export interface Evaluation {
   skill_id: string;
   sub_criterion_id: string;
   score_value: number;
+  note?: string;
   updated_at: string;
 }
