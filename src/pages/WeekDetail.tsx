@@ -184,29 +184,33 @@ const WeekDetail = () => {
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Assigned Students</span>
                       <span className="text-xs font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md">{groupStudents.length}</span>
                     </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      {groupStudents.length > 0 ? (
-                        groupStudents.map((student) => (
-                          <div 
+
+                    {groupStudents.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-2 mt-4">
+                        {groupStudents.map((student) => (
+                          <div
                             key={student.id}
-                            className="flex items-center gap-2 bg-zinc-50/80 border border-zinc-100 rounded-full pl-1 pr-3 py-1 hover:bg-white transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/week/${weekId}/student/${student.id}`);
+                            }}
+                            className="bg-white/50 hover:bg-white rounded-xl p-2 flex items-center gap-2 border border-zinc-100 shadow-sm transition-all cursor-pointer"
                           >
-                            <Avatar className="h-6 w-6 border border-white">
+                            <Avatar className="h-7 w-7 border border-white shrink-0">
                               <AvatarImage src={student.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
-                              <AvatarFallback className="text-[8px] font-bold">{student.first_name?.[0]}</AvatarFallback>
+                              <AvatarFallback className="text-[9px] font-bold">{student.first_name?.[0]}</AvatarFallback>
                             </Avatar>
-                            <span className="text-[11px] font-bold text-zinc-700">
-                              {student.first_name} {student.last_name?.[0]}.
+                            <span className="text-[11px] font-bold text-zinc-700 truncate">
+                              {student.first_name?.[0]}. {student.last_name}
                             </span>
                           </div>
-                        ))
-                      ) : (
-                        <div className="w-full py-4 border-2 border-dashed border-zinc-100 rounded-2xl flex items-center justify-center">
-                          <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">No students assigned</span>
-                        </div>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="w-full py-4 border-2 border-dashed border-zinc-100 rounded-2xl flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">No students assigned</span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

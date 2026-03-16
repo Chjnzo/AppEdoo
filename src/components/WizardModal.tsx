@@ -190,15 +190,18 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="w-[95vw] max-w-[1200px] rounded-[2.5rem] border-white/20 bg-white/80 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] p-0 overflow-hidden">
-        <DialogHeader className="p-8 pb-4">
+      <DialogContent
+        className="w-[95vw] max-w-[1200px] rounded-[2.5rem] border-white/20 bg-white/80 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] p-0 overflow-hidden max-h-[90vh] flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="p-8 pb-4 shrink-0">
           <DialogTitle className="text-2xl font-bold tracking-tight">
             {currentWizardStep === 1 && "Create New Week"}
             {currentWizardStep === 2 && "Add Students"}
             {currentWizardStep === 3 && "Assign Groups"}
           </DialogTitle>
         </DialogHeader>
-        <div className="p-8 pt-0">
+        <div className="flex-1 overflow-y-auto p-8 pt-0 no-scrollbar">
           <div className="mb-6">
             <div className="flex items-center gap-4 mb-2">
               {steps.map((s) => (
@@ -221,7 +224,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
             </div>
           </div>
 
-          <div className="min-h-[60vh] max-h-[75vh] overflow-y-auto no-scrollbar py-4 px-1">
+          <div className="py-2 px-1">
             {currentWizardStep === 1 && (
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="space-y-2">
@@ -248,61 +251,58 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
             )}
 
             {currentWizardStep === 2 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                <div className="flex items-start gap-4">
-                  <div className="relative group">
-                    <Avatar className="h-24 w-24 border-4 border-white shadow-lg">
-                      <AvatarImage src={newStudent.photo_preview} />
-                      <AvatarFallback className="bg-zinc-100">
-                        <Camera className="h-8 w-8 text-zinc-300" />
-                      </AvatarFallback>
-                    </Avatar>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Plus className="text-white h-6 w-6" />
-                    </button>
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
-                  </div>
-                  
-                  <div className="flex-1 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-zinc-400 uppercase">First Name</Label>
-                        <Input 
-                          placeholder="e.g. John" 
-                          className="h-12 rounded-2xl bg-zinc-50 border-zinc-100"
-                          value={newStudent.first_name}
-                          onChange={(e) => setNewStudent({ ...newStudent, first_name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-zinc-400 uppercase">Last Name</Label>
-                        <Input 
-                          placeholder="e.g. Doe" 
-                          className="h-12 rounded-2xl bg-zinc-50 border-zinc-100"
-                          value={newStudent.last_name}
-                          onChange={(e) => setNewStudent({ ...newStudent, last_name: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={handleAddStudent} className="flex-1 h-12 rounded-2xl bg-zinc-900 text-white font-bold">
-                        <UserPlus className="mr-2 h-4 w-4" /> Add Student
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setDraftStudents([...draftStudents, ...MOCK_CLASS])}
-                        className="h-12 rounded-2xl border-indigo-200 text-indigo-600 font-bold hover:bg-indigo-50"
-                      >
-                        <Database className="mr-2 h-4 w-4" /> Mock Data
-                      </Button>
-                    </div>
-                  </div>
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                {/* Compact horizontal add-student row */}
+                <div className="flex items-center gap-3 bg-white/60 border border-zinc-100 rounded-3xl p-3 shadow-sm">
+                  {/* Camera / photo preview button */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-11 h-11 shrink-0 rounded-full bg-zinc-100 border-2 border-zinc-200 flex items-center justify-center hover:bg-zinc-200 transition-colors overflow-hidden"
+                  >
+                    {newStudent.photo_preview ? (
+                      <img src={newStudent.photo_preview} className="w-full h-full object-cover" alt="preview" />
+                    ) : (
+                      <Camera className="h-4 w-4 text-zinc-400" />
+                    )}
+                  </button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
+
+                  {/* Name inputs */}
+                  <Input
+                    placeholder="Nome"
+                    className="h-11 rounded-2xl bg-zinc-50 border-zinc-100 flex-1"
+                    value={newStudent.first_name}
+                    onChange={(e) => setNewStudent({ ...newStudent, first_name: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddStudent()}
+                  />
+                  <Input
+                    placeholder="Cognome"
+                    className="h-11 rounded-2xl bg-zinc-50 border-zinc-100 flex-1"
+                    value={newStudent.last_name}
+                    onChange={(e) => setNewStudent({ ...newStudent, last_name: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddStudent()}
+                  />
+
+                  {/* Add button */}
+                  <Button
+                    onClick={handleAddStudent}
+                    className="h-11 px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shrink-0"
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Aggiungi
+                  </Button>
+
+                  {/* Mock data shortcut */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setDraftStudents([...draftStudents, ...MOCK_CLASS])}
+                    className="h-11 rounded-2xl border-indigo-200 text-indigo-600 font-bold hover:bg-indigo-50 shrink-0"
+                  >
+                    <Database className="h-4 w-4" />
+                  </Button>
                 </div>
 
-                <div className="bg-zinc-50/50 rounded-3xl p-6 max-h-[400px] overflow-y-auto no-scrollbar border border-zinc-100">
+                {/* Student list with strict height */}
+                <div className="flex-1 min-h-[200px] max-h-[40vh] overflow-y-auto bg-zinc-50/50 rounded-3xl p-4 no-scrollbar border border-zinc-100">
                   {draftStudents.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-zinc-400">
                       <Users className="h-12 w-12 mb-2 opacity-10" />
@@ -343,7 +343,7 @@ const WizardModal = ({ open, onOpenChange }: WizardModalProps) => {
           </div>
         </div>
 
-        <DialogFooter className="bg-zinc-50/50 p-6 border-t border-zinc-100">
+        <DialogFooter className="bg-zinc-50/50 p-6 border-t border-zinc-100 shrink-0">
           <div className="flex items-center justify-between w-full">
             <Button variant="ghost" onClick={prevStep} disabled={currentWizardStep === 1 || isSaving} className="rounded-2xl font-bold text-zinc-500">
               <ChevronLeft className="mr-2 h-4 w-4" /> Back

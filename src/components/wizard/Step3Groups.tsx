@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Shuffle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Step3GroupsProps {
@@ -115,12 +115,24 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
   const unassignedStudents = draftStudents.filter(student => !student.group_id);
   const allStudentsAssigned = draftStudents.length > 0 && unassignedStudents.length === 0;
 
+  const handleRandomize = () => {
+    if (unassignedStudents.length === 0 || draftGroups.length === 0) return;
+    const shuffled = [...unassignedStudents].sort(() => Math.random() - 0.5);
+    const updated = [...draftStudents];
+    shuffled.forEach((student, index) => {
+      const groupId = draftGroups[index % draftGroups.length].id;
+      const idx = updated.findIndex(s => s.id === student.id);
+      if (idx !== -1) updated[idx] = { ...updated[idx], group_id: groupId };
+    });
+    setDraftStudents(updated);
+  };
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="flex flex-col h-full space-y-6">
+      <div className="flex flex-col h-full space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {draftGroups.map((group) => (
-            <DroppableGroup 
+            <DroppableGroup
               key={group.id}
               group={group}
               students={draftStudents.filter(s => s.group_id === group.id)}
@@ -128,12 +140,26 @@ const Step3Groups = ({ onContinue }: Step3GroupsProps) => {
           ))}
         </div>
 
-        <div className="bg-zinc-50/50 p-6 rounded-[2.5rem] border border-zinc-100 flex-1 min-h-0 flex flex-col">
-          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-4">Unassigned Pool ({unassignedStudents.length})</h3>
-          <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Randomize button */}
+        {unassignedStudents.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={handleRandomize}
+            className="w-full rounded-2xl border-indigo-200 text-indigo-600 font-bold hover:bg-indigo-50 h-11"
+          >
+            <Shuffle className="h-4 w-4 mr-2" /> Assegnazione Casuale
+          </Button>
+        )}
+
+        {/* Unassigned pool with fixed max-height */}
+        <div className="bg-zinc-50/50 p-4 rounded-[2.5rem] border border-zinc-100 flex flex-col">
+          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-3">
+            Unassigned Pool ({unassignedStudents.length})
+          </h3>
+          <div className="max-h-[20vh] overflow-y-auto no-scrollbar">
             <div className="flex flex-wrap gap-2">
               {unassignedStudents.length === 0 ? (
-                <div className="text-center text-zinc-300 py-8 w-full font-bold uppercase text-xs tracking-widest">
+                <div className="text-center text-zinc-300 py-6 w-full font-bold uppercase text-xs tracking-widest">
                   All Students Assigned
                 </div>
               ) : (

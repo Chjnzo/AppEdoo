@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import Index from "./pages/Index";
 import WeekDetail from "./pages/WeekDetail";
 import GroupMatrix from "./pages/GroupMatrix";
+import StudentDetail from "./pages/StudentDetail";
 import Login from "./pages/Login";
 import SettingsPage from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -69,6 +70,12 @@ const App = () => {
             <Route path="/week/:weekId/group/:groupId" element={
               <ProtectedRoute>
                 <GroupMatrix />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/week/:weekId/student/:studentId" element={
+              <ProtectedRoute>
+                <StudentDetail />
               </ProtectedRoute>
             } />
 

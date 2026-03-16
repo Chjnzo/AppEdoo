@@ -4,152 +4,325 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/lib/supabase';
-import { Student, Group } from '@/types/database';
-import { useAppStore } from '@/store/useAppStore';
+import { Student, Group, Evaluation } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  ChevronLeft, 
-  Plus, 
-  Minus, 
-  Sparkles, 
-  CheckCircle2, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  ChevronLeft,
+  Plus,
+  Minus,
   Loader2,
-  Save,
-  Users
+  Users,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { showSuccess, showError, showLoading, dismissToast } from '@/utils/toast';
 
-const SKILLS_DATA = {
-  'MOTIVAZIONE': [
-    "Affronta i problemi con atteggiamento positivo",
-    "Porta a termine il lavoro con costanza",
-    "Si attiva per superare le difficoltà"
+// ── Skills definition ──────────────────────────────────────────────────────────
+const SKILLS_DATA: Record<string, string[]> = {
+  MOTIVAZIONE: [
+    'Affronta i problemi con atteggiamento positivo',
+    'Porta a termine il lavoro con costanza',
+    'Si attiva per superare le difficoltà',
   ],
-  'ORGANIZZAZIONE': [
-    "Mantiene lo spazio di lavoro ordinato",
-    "Gestione del tempo",
-    "Riconosce il processo di lavoro"
+  ORGANIZZAZIONE: [
+    'Mantiene lo spazio di lavoro ordinato',
+    'Gestione del tempo',
+    'Riconosce il processo di lavoro',
   ],
-  'AUTONOMIA': [
-    "Non ha paura di sbagliare",
-    "È attivo, propositivo e prende decisioni",
-    "Cerca strade alternative"
+  AUTONOMIA: [
+    'Non ha paura di sbagliare',
+    'È attivo, propositivo e prende decisioni',
+    'Cerca strade alternative',
   ],
-  'RELAZIONE': [
+  RELAZIONE: [
     "Autoregola il proprio atteggiamento",
     "Sostiene il gruppo",
-    "È orientato all'obiettivo del gruppo"
+    "È orientato all'obiettivo del gruppo",
   ],
-  'LEADERSHIP': [
-    "Assertività",
-    "Problematizza",
-    "Fa sintesi"
+  LEADERSHIP: [
+    'Assertività',
+    'Problematizza',
+    'Fa sintesi',
   ],
-  'AUTOVALUTAZIONE': [
-    "Riconosce punti di forza e debolezza",
-    "Accoglie il feedback come crescita",
-    "Cerca modi per migliorare"
-  ]
+  AUTOVALUTAZIONE: [
+    'Riconosce punti di forza e debolezza',
+    'Accoglie il feedback come crescita',
+    'Cerca modi per migliorare',
+  ],
 };
 
-type SkillKey = keyof typeof SKILLS_DATA;
+const SKILL_META: Record<string, {
+  abbr: string;
+  pill: string;
+  pillActive: string;
+  accent: string;
+}> = {
+  MOTIVAZIONE:    { abbr: 'MOT',   pill: 'bg-amber-50 text-amber-600 border-amber-200',      pillActive: 'bg-amber-500 text-white border-amber-500',      accent: 'text-amber-600'   },
+  ORGANIZZAZIONE: { abbr: 'ORG',   pill: 'bg-sky-50 text-sky-600 border-sky-200',            pillActive: 'bg-sky-500 text-white border-sky-500',            accent: 'text-sky-600'     },
+  AUTONOMIA:      { abbr: 'AUTON', pill: 'bg-violet-50 text-violet-600 border-violet-200',   pillActive: 'bg-violet-500 text-white border-violet-500',   accent: 'text-violet-600'  },
+  RELAZIONE:      { abbr: 'REL',   pill: 'bg-rose-50 text-rose-600 border-rose-200',         pillActive: 'bg-rose-500 text-white border-rose-500',         accent: 'text-rose-600'    },
+  LEADERSHIP:     { abbr: 'LEAD',  pill: 'bg-emerald-50 text-emerald-600 border-emerald-200',pillActive: 'bg-emerald-500 text-white border-emerald-500',  accent: 'text-emerald-600' },
+  AUTOVALUTAZIONE:{ abbr: 'AUTOV', pill: 'bg-indigo-50 text-indigo-600 border-indigo-200',   pillActive: 'bg-indigo-500 text-white border-indigo-500',   accent: 'text-indigo-600'  },
+};
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface EvalContext {
+  studentId: string;
+  studentName: string;
+  skillId: string;
+  subCriterionId: string;
+  type: 'plus' | 'minus';
+}
+
+// ── StudentAssessmentCard ──────────────────────────────────────────────────────
+interface StudentCardProps {
+  student: Student;
+  evaluations: Evaluation[];
+  onEvalRequest: (ctx: EvalContext) => void;
+}
+
+const StudentAssessmentCard = ({ student, evaluations, onEvalRequest }: StudentCardProps) => {
+  const [activeSkill, setActiveSkill] = useState<string | null>(null);
+
+  // Returns all events for a sub-criterion in chronological order
+  const eventsFor = (sub: string) =>
+    evaluations
+      .filter(e => e.sub_criterion_id === sub)
+      .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime());
+
+  // Pill summary: count of plus events across all sub-criteria for a skill
+  const totalPlusForSkill = (skill: string) =>
+    SKILLS_DATA[skill].reduce(
+      (sum, c) => sum + evaluations.filter(e => e.sub_criterion_id === c && e.score_value > 0).length,
+      0
+    );
+
+  return (
+    <Card className="rounded-[2.5rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.05)] overflow-hidden">
+      <CardContent className="p-6">
+        {/* Top Row: avatar + name + skill pills */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Identity */}
+          <div className="flex items-center gap-3 sm:w-48 shrink-0">
+            <Avatar className="h-12 w-12 border-2 border-white shadow-md">
+              <AvatarImage src={student.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
+              <AvatarFallback className="font-bold">{student.first_name[0]}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="font-black text-sm text-zinc-900 leading-tight truncate">{student.first_name}</p>
+              <p className="text-xs font-bold text-zinc-400 truncate">{student.last_name}</p>
+            </div>
+          </div>
+
+          {/* Skill pills */}
+          <div className="flex flex-wrap gap-2 flex-1">
+            {Object.keys(SKILLS_DATA).map((skill) => {
+              const meta = SKILL_META[skill];
+              const total = totalPlusForSkill(skill);
+              const isActive = activeSkill === skill;
+              return (
+                <button
+                  key={skill}
+                  onClick={() => setActiveSkill(isActive ? null : skill)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border transition-all duration-200',
+                    isActive ? meta.pillActive : meta.pill
+                  )}
+                >
+                  {meta.abbr}
+                  {total > 0 && (
+                    <span className={cn(
+                      'text-[9px] font-black px-1 rounded-full',
+                      isActive ? 'bg-white/25 text-white' : 'bg-white/80'
+                    )}>
+                      +{total}
+                    </span>
+                  )}
+                  {isActive
+                    ? <ChevronUp className="h-3 w-3" />
+                    : <ChevronDown className="h-3 w-3" />
+                  }
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Expanded criteria area */}
+        {activeSkill && (
+          <div className="mt-5 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="h-[1px] bg-zinc-100 mb-4" />
+            <div className="space-y-3">
+              {SKILLS_DATA[activeSkill].map((criterion, idx) => {
+                const events = eventsFor(criterion);
+                const meta   = SKILL_META[activeSkill];
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-4 p-4 bg-zinc-50/60 rounded-2xl border border-zinc-100/80 hover:bg-white transition-colors"
+                  >
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <span className={cn('text-[10px] font-black uppercase tracking-widest block mb-0.5', meta.accent)}>
+                        Criterio {idx + 1}
+                      </span>
+                      <p className="text-sm font-bold text-zinc-700 leading-snug">{criterion}</p>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      {/* Visual tally — one badge per event, chronological, never compensating */}
+                      {events.length > 0 && (
+                        <div className="flex flex-wrap gap-1 max-w-[96px] justify-end">
+                          {events.map(ev =>
+                            ev.score_value > 0
+                              ? <Badge key={ev.id} variant="outline" className="bg-green-50 text-green-600 border-green-200 px-1.5 font-black text-xs">+</Badge>
+                              : <Badge key={ev.id} variant="outline" className="bg-red-50 text-red-600 border-red-200 px-1.5 font-black text-xs">−</Badge>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Minus button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEvalRequest({
+                          studentId: student.id,
+                          studentName: `${student.first_name} ${student.last_name}`,
+                          skillId: activeSkill,
+                          subCriterionId: criterion,
+                          type: 'minus',
+                        })}
+                        className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all active:scale-90"
+                      >
+                        <Minus className="h-5 w-5" />
+                      </Button>
+
+                      {/* Plus button */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEvalRequest({
+                          studentId: student.id,
+                          studentName: `${student.first_name} ${student.last_name}`,
+                          skillId: activeSkill,
+                          subCriterionId: criterion,
+                          type: 'plus',
+                        })}
+                        className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all active:scale-90"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// ── GroupMatrix page ───────────────────────────────────────────────────────────
 const GroupMatrix = () => {
   const { weekId, groupId } = useParams<{ weekId: string; groupId: string }>();
-  const [activeSkill, setActiveSkill] = useState<SkillKey>('MOTIVAZIONE');
-  const [students, setStudents] = useState<Student[]>([]);
-  const [group, setGroup] = useState<Group | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
 
-  const { pendingEvaluations, setPendingEvaluation } = useAppStore();
+  const [students,    setStudents]    = useState<Student[]>([]);
+  const [group,       setGroup]       = useState<Group | null>(null);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [isLoading,   setIsLoading]   = useState(true);
+
+  const [selectedEvalContext, setSelectedEvalContext] = useState<EvalContext | null>(null);
+  const [noteText,  setNoteText]  = useState('');
+  const [isSaving,  setIsSaving]  = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!groupId) return;
       setIsLoading(true);
-      
       try {
-        const { data: groupData } = await supabase
-          .from('groups')
+        // Group
+        const { data: groupData } = await (supabase.from('groups') as any)
           .select('*')
           .eq('id', groupId)
           .single();
-        
         if (groupData) setGroup(groupData);
 
+        // Students
         const { data: studentsData } = await (supabase.from('students') as any)
           .select('*')
           .eq('group_id', groupId);
-        
-        if (studentsData) {
+
+        if (studentsData && studentsData.length > 0) {
           setStudents(studentsData);
-          
-          // Fetch existing evaluations to populate store
+          // All evaluations for these students
           const { data: evalData } = await (supabase.from('evaluations') as any)
             .select('*')
-            .in('student_id', studentsData.map((s: any) => s.id));
-          
-          if (evalData) {
-            evalData.forEach((ev: any) => {
-              setPendingEvaluation(ev.student_id, ev.sub_criterion_id, ev.score_value);
-            });
-          }
+            .in('student_id', studentsData.map((s: Student) => s.id))
+            .order('updated_at', { ascending: false });
+          if (evalData) setEvaluations(evalData);
+        } else {
+          setStudents([]);
         }
       } catch (error) {
-        console.error("Error fetching matrix data:", error);
+        console.error('Error fetching matrix data:', error);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchData();
-  }, [groupId, setPendingEvaluation]);
+  }, [groupId]);
 
-  const handleScoreChange = (studentId: string, criterion: string, delta: number) => {
-    const currentScore = pendingEvaluations[studentId]?.[criterion] || 0;
-    const newScore = Math.max(0, currentScore + delta);
-    setPendingEvaluation(studentId, criterion, newScore);
+  const handleDialogClose = () => {
+    setSelectedEvalContext(null);
+    setNoteText('');
   };
 
-  const handleSave = async () => {
+  const handleSaveEvaluation = async () => {
+    if (!selectedEvalContext || !noteText.trim()) return;
     setIsSaving(true);
-    const toastId = showLoading("Saving evaluations...");
-    
+    const toastId = showLoading('Salvataggio...');
     try {
-      const updates: any[] = [];
-      for (const [studentId, criteria] of Object.entries(pendingEvaluations)) {
-        for (const [criterionId, score] of Object.entries(criteria)) {
-          const skillId = (Object.keys(SKILLS_DATA) as SkillKey[]).find(s => 
-            SKILLS_DATA[s].includes(criterionId)
-          );
+      const newRecord = {
+        student_id:      selectedEvalContext.studentId,
+        skill_id:        selectedEvalContext.skillId,
+        sub_criterion_id: selectedEvalContext.subCriterionId,
+        score_value:     selectedEvalContext.type === 'plus' ? 1 : -1,
+        note:            noteText.trim(),
+        updated_at:      new Date().toISOString(),
+      };
 
-          if (skillId) {
-            updates.push({
-              student_id: studentId,
-              skill_id: skillId,
-              sub_criterion_id: criterionId,
-              score_value: score,
-              updated_at: new Date().toISOString()
-            });
-          }
-        }
-      }
+      const { data, error } = await (supabase.from('evaluations') as any)
+        .insert(newRecord)
+        .select()
+        .single();
 
-      if (updates.length > 0) {
-        const { error } = await (supabase.from('evaluations') as any)
-          .upsert(updates, { onConflict: 'student_id,sub_criterion_id' });
-        
-        if (error) throw error;
-      }
+      if (error) throw error;
 
-      showSuccess("All evaluations saved successfully!");
+      // Optimistic update — no refetch needed
+      if (data) setEvaluations(prev => [data, ...prev]);
+
+      showSuccess('Valutazione salvata!');
+      handleDialogClose();
     } catch (error: any) {
-      console.error("Save error:", error);
-      showError(error.message || "Failed to save evaluations");
+      console.error('Save error:', error);
+      showError(error.message || 'Errore durante il salvataggio');
     } finally {
       setIsSaving(false);
       dismissToast(toastId);
@@ -168,138 +341,152 @@ const GroupMatrix = () => {
 
   return (
     <AppLayout>
-      <div className="h-full flex flex-col space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+
         {/* Header */}
-        <div className="flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-6">
-            <Link to={`/week/${weekId}`}>
-              <Button variant="ghost" size="icon" className="rounded-2xl h-12 w-12 bg-white shadow-sm border border-zinc-100">
-                <ChevronLeft className="h-6 w-6" />
-              </Button>
-            </Link>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-white", group?.color || "bg-zinc-500")}>
-                  {group?.name}
-                </span>
-                <span className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Evaluation Matrix</span>
-              </div>
-              <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900">Skill Assessment</h2>
+        <div className="flex items-center gap-6 shrink-0 flex-wrap">
+          <Link to={`/week/${weekId}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-2xl h-12 w-12 bg-white shadow-sm border border-zinc-100 hover:scale-105 transition-transform"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+          </Link>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white',
+                group?.color || 'bg-zinc-500'
+              )}>
+                {group?.name}
+              </span>
+              <span className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Valutazione</span>
+            </div>
+            <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900">Skill Assessment</h2>
+          </div>
+
+          <div className="ml-auto bg-white/50 border border-white/20 rounded-2xl px-5 py-2.5 flex items-center gap-6 shadow-sm">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Studenti</span>
+              <span className="text-lg font-black text-zinc-900">{students.length}</span>
+            </div>
+            <div className="w-[1px] h-7 bg-zinc-200" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Valutazioni</span>
+              <span className="text-lg font-black text-zinc-900">{evaluations.length}</span>
             </div>
           </div>
-          <Button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 h-12 shadow-lg shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Evaluations
-          </Button>
         </div>
 
-        <div className="flex-1 flex gap-8 min-h-0 overflow-hidden">
-          {/* Left Sidebar - Skill Selection */}
-          <div className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto no-scrollbar pr-2">
-            {(Object.keys(SKILLS_DATA) as SkillKey[]).map((skill) => (
-              <button
-                key={skill}
-                onClick={() => setActiveSkill(skill)}
-                className={cn(
-                  "flex items-center justify-between p-5 rounded-[2rem] transition-all duration-500 text-left group",
-                  activeSkill === skill 
-                    ? "bg-zinc-900 text-white shadow-2xl shadow-zinc-200 scale-[1.02]" 
-                    : "bg-white/70 backdrop-blur-xl text-zinc-500 hover:bg-white border border-zinc-100"
-                )}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 mb-1">Skill</span>
-                  <span className="font-black text-sm tracking-tight">{skill}</span>
-                </div>
-                <div className={cn(
-                  "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                  activeSkill === skill ? "bg-white/10" : "bg-zinc-50 group-hover:bg-zinc-100"
-                )}>
-                  <Sparkles className={cn("h-4 w-4", activeSkill === skill ? "text-white" : "text-zinc-300")} />
-                </div>
-              </button>
-            ))}
-          </div>
+        {/* Student cards */}
+        <div className="space-y-5 pb-12">
+          {students.map(student => (
+            <StudentAssessmentCard
+              key={student.id}
+              student={student}
+              evaluations={evaluations.filter(e => e.student_id === student.id)}
+              onEvalRequest={setSelectedEvalContext}
+            />
+          ))}
 
-          {/* Main Content - Student Matrix */}
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-12">
-            {(students || []).map((student) => (
-              <Card key={student.id} className="rounded-[3rem] border-none bg-white/70 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                <CardContent className="p-8">
-                  <div className="flex flex-col lg:flex-row gap-8">
-                    {/* Student Info */}
-                    <div className="lg:w-64 shrink-0 flex flex-col items-center text-center space-y-4">
-                      <div className="relative">
-                        <Avatar className="h-24 w-24 border-4 border-white shadow-xl">
-                          <AvatarImage src={student.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} />
-                          <AvatarFallback className="text-xl font-bold">{student.first_name[0]}</AvatarFallback>
-                        </Avatar>
-                        <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center">
-                          <CheckCircle2 className="h-4 w-4 text-white" />
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-zinc-900 tracking-tight">{student.first_name} {student.last_name}</h3>
-                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mt-1">Student</p>
-                      </div>
-                    </div>
-
-                    {/* Criteria Scoring */}
-                    <div className="flex-1 space-y-6">
-                      {SKILLS_DATA[activeSkill].map((criterion, idx) => {
-                        const score = pendingEvaluations[student.id]?.[criterion] || 0;
-                        return (
-                          <div key={idx} className="flex items-center justify-between p-6 bg-zinc-50/50 rounded-[2rem] border border-zinc-100/50 group hover:bg-white hover:shadow-md transition-all duration-300">
-                            <div className="flex-1 pr-8">
-                              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest block mb-1">Criterion {idx + 1}</span>
-                              <p className="text-sm font-bold text-zinc-700 leading-relaxed">{criterion}</p>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleScoreChange(student.id, criterion, -1)}
-                                className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all active:scale-90"
-                              >
-                                <Minus className="h-5 w-5" />
-                              </Button>
-                              
-                              <div className="w-16 h-16 bg-white rounded-[1.5rem] shadow-inner border border-zinc-100 flex items-center justify-center">
-                                <span className="text-2xl font-black text-zinc-900">{score}</span>
-                              </div>
-
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleScoreChange(student.id, criterion, 1)}
-                                className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-zinc-100 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-90"
-                              >
-                                <Plus className="h-5 w-5" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {(!students || students.length === 0) && (
-              <div className="h-64 flex flex-col items-center justify-center bg-white/40 rounded-[3rem] border-2 border-dashed border-zinc-200">
-                <Users className="h-12 w-12 text-zinc-300 mb-4" />
-                <p className="text-zinc-400 font-bold">No students found in this group</p>
-              </div>
-            )}
-          </div>
+          {students.length === 0 && (
+            <div className="h-64 flex flex-col items-center justify-center bg-white/40 rounded-[3rem] border-2 border-dashed border-zinc-200">
+              <Users className="h-12 w-12 text-zinc-300 mb-4" />
+              <p className="text-zinc-400 font-bold">Nessuno studente in questo gruppo</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── Add Evaluation Dialog ── */}
+      <Dialog open={!!selectedEvalContext} onOpenChange={(open) => !open && handleDialogClose()}>
+        <DialogContent
+          className="rounded-[2rem] border-white/20 bg-white/90 backdrop-blur-2xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader className="pb-1">
+            <div className="mb-2">
+              {selectedEvalContext && (
+                <span className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider',
+                  selectedEvalContext.type === 'plus'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-rose-100 text-rose-700'
+                )}>
+                  {selectedEvalContext.type === 'plus'
+                    ? <Plus className="h-3 w-3" />
+                    : <Minus className="h-3 w-3" />
+                  }
+                  {selectedEvalContext.type === 'plus' ? 'Più' : 'Meno'}
+                </span>
+              )}
+            </div>
+            <DialogTitle className="text-xl font-black text-zinc-900 leading-snug">
+              {selectedEvalContext?.type === 'plus' ? 'Aggiungi Più' : 'Aggiungi Meno'} a{' '}
+              <span className="text-indigo-600">{selectedEvalContext?.studentName}</span>
+            </DialogTitle>
+            <DialogDescription className="text-sm text-zinc-500 leading-relaxed pt-1">
+              {selectedEvalContext?.subCriterionId}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-3 space-y-2">
+            <Label htmlFor="eval-note" className="text-xs font-black text-zinc-700 uppercase tracking-wider flex items-center gap-1">
+              Motivo <span className="text-rose-500">*</span>
+            </Label>
+            <Textarea
+              id="eval-note"
+              placeholder="Descrivi il motivo di questa valutazione..."
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSaveEvaluation();
+              }}
+              className="min-h-[100px] rounded-2xl bg-zinc-50 border-zinc-200 focus:border-indigo-300 resize-none text-sm font-medium"
+              autoFocus
+            />
+            {noteText.length === 0 && (
+              <p className="text-[11px] text-rose-500 font-bold">Il motivo è obbligatorio</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 pt-1">
+            <Button
+              variant="ghost"
+              onClick={handleDialogClose}
+              disabled={isSaving}
+              className="rounded-2xl font-bold text-zinc-500"
+            >
+              Annulla
+            </Button>
+            <Button
+              onClick={handleSaveEvaluation}
+              disabled={!noteText.trim() || isSaving}
+              className={cn(
+                'rounded-2xl font-bold px-6 shadow-lg transition-all active:scale-95 disabled:opacity-50',
+                selectedEvalContext?.type === 'plus'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
+                  : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-100'
+              )}
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  {selectedEvalContext?.type === 'plus'
+                    ? <Plus className="h-4 w-4 mr-1.5" />
+                    : <Minus className="h-4 w-4 mr-1.5" />
+                  }
+                  Salva Valutazione
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
